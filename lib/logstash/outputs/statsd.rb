@@ -100,7 +100,7 @@ class LogStash::Outputs::Statsd < LogStash::Outputs::Base
 
   public
   def receive(event)
-    
+
     @client.namespace = event.sprintf(@namespace) if not @namespace.empty?
     @logger.debug? and @logger.debug("Original sender: #{@sender}")
     sender = event.sprintf(@sender)
@@ -113,8 +113,14 @@ class LogStash::Outputs::Statsd < LogStash::Outputs::Base
       @client.decrement(build_stat(event.sprintf(metric), sender), @sample_rate)
     end
     @count.each do |metric, val|
-      @client.count(build_stat(event.sprintf(metric), sender),
-                    event.sprintf(val), @sample_rate)
+      # test added here to check empty metric name
+      count_metric_name = build_stat(event.sprintf(metric), sender)
+      if count_metric_name.include?('%{')
+        @logger.debug? and @logger.debug("Not logging due to empty metric name", :count_metric_name => count_metric_name)
+      else
+        @client.count(count_metric_name,
+                      event.sprintf(val), @sample_rate)
+      end
     end
     @timing.each do |metric, val|
       @client.timing(build_stat(event.sprintf(metric), sender),
@@ -137,6 +143,9 @@ class LogStash::Outputs::Statsd < LogStash::Outputs::Base
     metric = metric.to_s.gsub('::','.')
     metric.gsub!(RESERVED_CHARACTERS_REGEX, '_')
     @logger.debug? and @logger.debug("Formatted value", :sender => sender, :metric => metric)
-    return "#{sender}.#{metric}"
+    # check for empty sender
+    full_metric_path = "#{sender}.#{metric}"
+    full_metric_path = metric if sender.empty?
+    return "#{full_metric_path}"
   end
 end # class LogStash::Outputs::Statsd
